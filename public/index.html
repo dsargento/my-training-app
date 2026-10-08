@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sport Quest</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏋️</text></svg>">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="hero">
+    <div class="avatar" id="avatar">
+      <svg viewBox="0 0 120 120" aria-hidden="true">
+        <circle cx="60" cy="60" r="52" class="ring-bg"/>
+        <circle cx="60" cy="60" r="52" class="ring" id="ring"/>
+      </svg>
+      <div class="avatar-level"><small>NIV.</small><span id="level">–</span></div>
+    </div>
+    <div class="hero-text">
+      <p class="eyebrow">Off season · Squat emphasis</p>
+      <h1 id="title">Chargement…</h1>
+      <div class="xpbar"><div id="xpfill"></div></div>
+      <p class="muted" id="xptext"></p>
+    </div>
+    <button id="sync" class="btn">⟳ Synchroniser</button>
+  </header>
+
+  <main>
+    <section class="tiles" id="tiles"></section>
+
+    <div class="grid-2">
+      <section class="card quest">
+        <h2>⚔️ Prochaine quête</h2>
+        <div id="next"></div>
+      </section>
+
+      <section class="card">
+        <h2>🐉 Les trois boss <span class="muted small">1RM estimé</span></h2>
+        <div id="bosses"></div>
+        <p class="muted small">Estimé à partir des charges et des RPE prévus dans le programme.</p>
+      </section>
+    </div>
+
+    <section class="card">
+      <div class="section-head">
+        <h2>📋 Table de charges</h2>
+        <select id="tableSelect" class="select" aria-label="Exercice"></select>
+      </div>
+      <div id="loadTable"></div>
+    </section>
+
+    <section class="card">
+      <h2>🗺️ Carte du programme</h2>
+      <div id="map" class="map"></div>
+    </section>
+
+    <section class="card coach">
+      <div class="coach-head">
+        <h2>🧙 Le coach</h2>
+        <button id="coachBtn" class="btn">Demander un bilan</button>
+      </div>
+      <div id="coach" class="coach-text muted">Le coach IA analyse tes séances et te propose un défi pour la prochaine.</div>
+    </section>
+
+    <section class="card">
+      <h2>🏅 Succès</h2>
+      <div id="badges" class="badges"></div>
+    </section>
+
+    <section class="card">
+      <h2>📜 Journal</h2>
+      <div id="journal"></div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>
