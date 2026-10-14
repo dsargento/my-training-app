@@ -56,4 +56,10 @@ app.post("/api/coach", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => console.log(`Sport Quest → http://localhost:${PORT}  (source : ${SOURCE}, IA : ${aiEnabled() ? "oui" : "non"})`));
+app.listen(PORT, (err) => {
+  if (err) {
+    console.error(err.code === "EADDRINUSE" ? `Le port ${PORT} est déjà utilisé (un autre Sport Quest tourne peut-être encore).` : err);
+    process.exit(1);
+  }
+  console.log(`Sport Quest → http://localhost:${PORT}  (source : ${SOURCE}, IA : ${aiEnabled() ? "oui" : "non"})`);
+});
