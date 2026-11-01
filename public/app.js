@@ -205,6 +205,35 @@ function renderBadges(badges) {
     .join("");
 }
 
+const longDate = (d) => new Date(`${d}T12:00:00`).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+const placeText = (p) => (Number(p) === 1 ? "1er" : Number(p) ? `${p}e` : esc(p));
+
+function renderTrophies(t) {
+  $("trophyCard").hidden = !t.meets.length && !t.next;
+  const plural = (n, word) => `${n} ${word}${n > 1 ? "s" : ""}`;
+  $("trophySummary").textContent = t.meets.length
+    ? [plural(t.meets.length, "compète"), t.wins && plural(t.wins, "victoire"), t.podiums > t.wins && plural(t.podiums, "podium")].filter(Boolean).join(" · ")
+    : "";
+  const next = t.next
+    ? `<div class="trophy upcoming">
+        <div class="trophy-icon">🎯</div>
+        <div><div class="trophy-name">${esc(t.next.name)}</div>
+          <div class="trophy-meta">${longDate(t.next.date)}</div>
+          <div class="trophy-countdown">dans ${plural(t.next.weeksLeft, "semaine")}</div></div>
+      </div>`
+    : "";
+  const meets = t.meets
+    .map((m) => `<div class="trophy ${m.best ? "best" : ""}">
+      <div class="trophy-icon">${m.icon}</div>
+      <div><div class="trophy-name">${esc(m.name)}</div>
+        <div class="trophy-meta">${placeText(m.place)} · ${longDate(m.date)}${m.town ? ` · ${esc(m.town)}` : ""}</div>
+        ${m.total ? `<div class="trophy-total">${num(m.total)} <small>kg de total</small></div>` : ""}
+        ${m.tags.length ? `<div class="trophy-tags">${m.tags.map((tag) => `<span class="pill">${esc(tag)}</span>`).join("")}</div>` : ""}</div>
+    </div>`)
+    .join("");
+  $("trophies").innerHTML = next + meets;
+}
+
 function renderJournal(journal) {
   if (!journal.length) {
     $("journal").innerHTML = `<p class="empty">Aucune séance pour l'instant. La première quête t'attend.</p>`;
@@ -241,6 +270,7 @@ async function load() {
     renderBosses(g.bosses);
     renderTableSelect(g);
     renderMap(g.map);
+    renderTrophies(g.trophies);
     renderBadges(g.badges);
     renderJournal(g.journal);
     if (g.coach) $("coach").innerHTML = markdown(g.coach.text);

@@ -243,3 +243,41 @@ export function computeGame(entries, exerciseInfo, firstSeen) {
     map: sessions.map(({ key, block, week, day, status, xp: sxp }) => ({ key, block, week, day, status, xp: sxp, isNext: key === next?.key })),
   };
 }
+
+// --- Salle des trophées : les compétitions passées (OpenPowerlifting) et la prochaine en ligne de mire.
+const MEDALS = { 1: "🥇", 2: "🥈", 3: "🥉" };
+
+export function computeTrophies(meets, nextMeet, today = new Date()) {
+  let bestTotal = 0;
+  let podium = false;
+  const trophies = [...meets]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((m, i) => {
+      const place = Number(m.place) || null;
+      const tags = [];
+      if (i === 0) tags.push("Première compète");
+      if (place === 1) tags.push("Victoire");
+      else if (place && place <= 3 && !podium) tags.push("Premier podium");
+      if (m.total && m.total > bestTotal) {
+        if (i > 0) tags.push("Meilleur total");
+        bestTotal = m.total;
+      }
+      if (m.attemptsTaken === 9 && m.attemptsMade === 9) tags.push("9/9 sans faute");
+      if (place && place <= 3) podium = true;
+      return { ...m, icon: MEDALS[place] ?? "🏟️", tags, best: false };
+    });
+
+  for (const t of trophies) t.best = Boolean(t.total) && t.total === bestTotal;
+
+  const date = nextMeet?.date ? new Date(`${nextMeet.date}T12:00:00`) : null;
+  const next = date && date > today
+    ? { name: nextMeet.name || "Prochaine compète", date: nextMeet.date, weeksLeft: Math.ceil((date - today) / (7 * 24 * 3600 * 1000)) }
+    : null;
+
+  return {
+    next,
+    meets: trophies.reverse(),
+    wins: trophies.filter((t) => Number(t.place) === 1).length,
+    podiums: trophies.filter((t) => Number(t.place) <= 3).length,
+  };
+}
