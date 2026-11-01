@@ -33,10 +33,25 @@ function loadAt(e1rm, reps, rpe) {
   return pct ? roundTo(e1rm * pct, 2.5) : null;
 }
 
+// Un titre par niveau ; au-delà du dernier, la légende continue en chiffres romains (Légende II, III…).
 const LEVEL_TITLES = [
-  "Recrue", "Apprenti de la barre", "Écuyer du rack", "Chevalier du squat",
-  "Gardien de la plateforme", "Champion de fer", "Seigneur du powerlifting", "Titan", "Légende",
+  "Recrue", "Apprenti de la barre", "Écuyer du rack", "Chevalier du squat", "Gardien de la plateforme",
+  "Forgeron de la fonte", "Champion de fer", "Briseur de plateaux", "Maître des disques", "Seigneur du powerlifting",
+  "Porteur de magnésie", "Baron du bench", "Comte du soulevé", "Duc du squat", "Gardien des trois mouvements",
+  "Vétéran de la plateforme", "Maître du RPE", "Architecte de la force", "Colosse", "Titan",
+  "Titan d'acier", "Seigneur des titans", "Demi-dieu de la fonte", "Légende",
 ];
+
+function roman(n) {
+  const digits = [[1000, "M"], [900, "CM"], [500, "D"], [400, "CD"], [100, "C"], [90, "XC"], [50, "L"], [40, "XL"], [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"]];
+  return digits.reduce((out, [value, letters]) => {
+    for (; n >= value; n -= value) out += letters;
+    return out;
+  }, "");
+}
+
+const levelTitle = (level) =>
+  level <= LEVEL_TITLES.length ? LEVEL_TITLES[level - 1] : `${LEVEL_TITLES.at(-1)} ${roman(level - LEVEL_TITLES.length + 1)}`;
 
 const xpForLevel = (level) => 50 * (level - 1) * level; // 0, 100, 300, 600, 1000...
 
@@ -45,7 +60,7 @@ function levelFromXp(xp) {
   while (xp >= xpForLevel(level + 1)) level += 1;
   return {
     level,
-    title: LEVEL_TITLES[Math.min(level - 1, LEVEL_TITLES.length - 1)],
+    title: levelTitle(level),
     current: xp - xpForLevel(level),
     needed: xpForLevel(level + 1) - xpForLevel(level),
   };
