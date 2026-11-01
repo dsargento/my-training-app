@@ -294,6 +294,7 @@ const MEDALS = { 1: "🥇", 2: "🥈", 3: "🥉" };
 
 export function computeTrophies(meets, nextMeet, today = new Date()) {
   let bestTotal = 0;
+  let bestDots = 0;
   let podium = false;
   const trophies = [...meets]
     .sort((a, b) => a.date.localeCompare(b.date))
@@ -306,6 +307,11 @@ export function computeTrophies(meets, nextMeet, today = new Date()) {
       if (m.total && m.total > bestTotal) {
         if (i > 0) tags.push("Meilleur total");
         bestTotal = m.total;
+      }
+      // Les Dots ramènent le total au poids de corps : un meilleur Dots peut venir d'une compète plus légère.
+      if (m.dots && m.dots > bestDots) {
+        if (i > 0) tags.push("Meilleur Dots");
+        bestDots = m.dots;
       }
       if (m.attemptsTaken === 9 && m.attemptsMade === 9) tags.push("9/9 sans faute");
       if (place && place <= 3) podium = true;

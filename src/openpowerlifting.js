@@ -1,5 +1,6 @@
 // Historique de compétitions : export CSV public d'un athlète sur OpenPowerlifting, mis en cache une journée.
 const CACHE_MS = 24 * 3600 * 1000;
+const CACHE_VERSION = 2; // à incrémenter quand toMeet() lit de nouvelles colonnes
 
 // CSV simple avec champs entre guillemets possibles ("Meet, Paris").
 function parseCsv(text) {
@@ -43,6 +44,7 @@ function toMeet(r) {
     bench: kg(r.Best3BenchKg),
     deadlift: kg(r.Best3DeadliftKg),
     total: kg(r.TotalKg),
+    dots: kg(r.Dots),
     attemptsMade: attempts.filter((a) => a > 0).length,
     attemptsTaken: attempts.filter((a) => a != null).length,
   };
@@ -51,12 +53,12 @@ function toMeet(r) {
 // Renvoie le cache tant qu'il est frais ; en cas d'échec réseau, garde l'ancien plutôt que rien.
 export async function loadMeets(user, cache) {
   if (!user) return null;
-  const fresh = cache?.user === user && Date.now() - Date.parse(cache.fetchedAt) < CACHE_MS;
+  const fresh = cache?.user === user && cache.version === CACHE_VERSION && Date.now() - Date.parse(cache.fetchedAt) < CACHE_MS;
   if (fresh) return cache;
   try {
     const res = await fetch(`https://www.openpowerlifting.org/api/liftercsv/${encodeURIComponent(user)}`);
     if (!res.ok) throw new Error(`OpenPowerlifting : HTTP ${res.status}`);
-    return { user, fetchedAt: new Date().toISOString(), meets: parseCsv(await res.text()).map(toMeet) };
+    return { user, version: CACHE_VERSION, fetchedAt: new Date().toISOString(), meets: parseCsv(await res.text()).map(toMeet) };
   } catch (err) {
     console.warn(err.message);
     return cache?.user === user ? cache : null;

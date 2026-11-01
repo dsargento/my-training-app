@@ -245,6 +245,7 @@ function renderTrophies(t, allTimeBests) {
       <div><div class="trophy-name">${esc(m.name)}</div>
         <div class="trophy-meta">${placeText(m.place)} · ${longDate(m.date)}${m.town ? ` · ${esc(m.town)}` : ""}</div>
         ${m.total ? `<div class="trophy-total">${num(m.total)} <small>kg de total</small></div>` : ""}
+        ${m.dots ? `<div class="trophy-dots">${num(Math.round(m.dots * 10) / 10)} Dots${m.bodyweight ? ` · ${num(m.bodyweight)} kg de corps` : ""}</div>` : ""}
         ${m.tags.length ? `<div class="trophy-tags">${m.tags.map((tag) => `<span class="pill">${esc(tag)}</span>`).join("")}</div>` : ""}</div>
     </div>`)
     .join("");
