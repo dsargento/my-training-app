@@ -6,7 +6,7 @@ const LIFT_NAMES = { squat: "Squat", bench: "Développé couché", deadlift: "So
 
 // "140 kg × 5", ou juste le constat quand seul le 1RM estimé a progressé.
 const recordText = (r) => (r.weight || r.rep ? `${num(r.load)} kg × ${num(r.reps)}` : "plus fort que jamais 💪");
-const recordDetail = (r) => `${r.name} ${recordText(r)}${r.previous ? ` (avant ${num(r.previous)} kg)` : ""}`;
+const recordDetail = (r) => `${r.name} ${recordText(r)}${r.previous ? ` (avant ${num(r.previous)} kg)` : ""}${r.allTime ? " · record absolu" : ""}`;
 
 function toast(message, isError = false) {
   const el = $("toast");
@@ -209,8 +209,24 @@ function renderBadges(badges) {
 const longDate = (d) => new Date(`${d}T12:00:00`).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
 const placeText = (p) => (Number(p) === 1 ? "1er" : Number(p) ? `${p}e` : esc(p));
 
-function renderTrophies(t) {
-  $("trophyCard").hidden = !t.meets.length && !t.next;
+// Records de tous les temps : repliés et discrets, les records du programme restent la vedette.
+function renderAllTime(bests) {
+  if (!bests.length) return "";
+  const month = (d) => (d ? new Date(`${d}T12:00:00`).toLocaleDateString("fr-FR", { month: "short", year: "numeric" }) : "");
+  return `<details class="alltime">
+    <summary>Records de tous les temps</summary>
+    <div class="alltime-list">${bests
+      .map((b) => `<div class="alltime-row">
+        <span>${esc(b.emoji)} ${esc(b.name)}</span>
+        <span class="alltime-load">${num(b.load)} kg × ${num(b.reps)}</span>
+        <span class="alltime-when">${esc(b.program)} · ${month(b.date)}</span>
+      </div>`)
+      .join("")}</div>
+  </details>`;
+}
+
+function renderTrophies(t, allTimeBests) {
+  $("trophyCard").hidden = !t.meets.length && !t.next && !allTimeBests.length;
   const plural = (n, word) => `${n} ${word}${n > 1 ? "s" : ""}`;
   $("trophySummary").textContent = t.meets.length
     ? [plural(t.meets.length, "compète"), t.wins && plural(t.wins, "victoire"), t.podiums > t.wins && plural(t.podiums, "podium")].filter(Boolean).join(" · ")
@@ -233,6 +249,7 @@ function renderTrophies(t) {
     </div>`)
     .join("");
   $("trophies").innerHTML = next + meets;
+  $("allTime").innerHTML = renderAllTime(allTimeBests);
 }
 
 function renderJournal(journal, programName) {
@@ -245,7 +262,7 @@ function renderJournal(journal, programName) {
       const date = s.date ? new Date(s.date).toLocaleDateString("fr-FR", { day: "numeric", month: "long" }) : "";
       const done = s.exercises
         .filter((x) => x.done)
-        .map((x) => `${esc(x.name)} ${esc(x.loadText)}${x.record ? ` <span class="rec" title="Record : ${esc(recordText(x.record))}">🏆</span>` : ""}`)
+        .map((x) => `${esc(x.name)} ${esc(x.loadText)}${x.record ? ` <span class="rec" title="Record${x.record.allTime ? " absolu" : " du programme"} : ${esc(recordText(x.record))}">🏆</span>` : ""}`)
         .join(" · ");
       return `<div class="log">
         <div class="log-head"><div><b>Semaine ${s.week} · Jour ${s.day}</b>${s.status === "perfect" ? `<span class="pill">💎 parfaite</span>` : ""}${s.records ? `<span class="pill">🏆 ${s.records} record${s.records > 1 ? "s" : ""}</span>` : ""}
@@ -271,7 +288,7 @@ async function load() {
     renderBosses(g.bosses);
     renderTableSelect(g);
     renderMap(g.map);
-    renderTrophies(g.trophies);
+    renderTrophies(g.trophies, g.allTimeBests);
     renderBadges(g.badges);
     renderJournal(g.journal, g.programName);
     if (g.coach) $("coach").innerHTML = markdown(g.coach.text);

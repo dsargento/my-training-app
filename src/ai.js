@@ -53,16 +53,22 @@ const EXERCISE_SCHEMA = {
   additionalProperties: false,
 };
 
+const COMPETITION_NAMES = { squat: "Competition squat", bench: "Competition bench", deadlift: "Competition deadlift" };
+
 export function classifyByKeywords(name) {
   const n = name.toLowerCase();
   const lift = /deadlift|\bdl\b|soulevé/.test(n) ? "deadlift"
     : /bench|couché/.test(n) ? "bench"
     : /squat/.test(n) ? "squat"
     : "other";
+  const competition = lift !== "other" && /competition|compétition/.test(n);
+  // Les notes entre parenthèses ("(% of E1RM)") ne changent pas l'exercice ; le mouvement de compétition
+  // garde un seul nom (« Competition pause bench » est le bench de compétition, toujours marqué).
+  const base = n.replace(/\s*\([^)]*\)/g, "").trim().replace(/\s+/g, " ");
   return {
-    canonical: name.trim().replace(/\s+/g, " ").toLowerCase().replace(/^./, (c) => c.toUpperCase()),
+    canonical: competition ? COMPETITION_NAMES[lift] : base.replace(/^./, (c) => c.toUpperCase()),
     lift,
-    competition: lift !== "other" && /competition|compétition/.test(n),
+    competition,
     muscles: [],
     emoji: { squat: "🦵", bench: "💪", deadlift: "🏗️", other: "🏋️" }[lift],
     source: "mots-clés",
@@ -80,6 +86,8 @@ export async function classifyExercises(names) {
       "Pour chaque nom, donne un nom canonique en français : les écritures différentes d'un même exercice " +
       "(ex. « Competition bench » et « Competition Bench ») partagent le même nom canonique, " +
       "mais une variante (pause, tempo, high-bar) reste un exercice distinct de la version de compétition. " +
+      "Exceptions : les notes entre parenthèses (« (% of E1RM) », « (seconds per side) ») ne changent pas l'exercice, " +
+      "et « Competition pause bench » est le bench de compétition (toujours marqué en compète). " +
       "`lift` = le mouvement de compétition auquel l'exercice se rattache (squat, bench, deadlift) ou other. " +
       "`competition` = vrai seulement pour la version de compétition exacte.",
     prompt: `Exercices à classer :\n${names.map((n) => `- ${n}`).join("\n")}`,

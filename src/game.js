@@ -51,6 +51,8 @@ function levelFromXp(xp) {
   };
 }
 
+const LIFT_ORDER = ["squat", "bench", "deadlift", "other"];
+
 export const XP = { exercise: 10, perTonne: 10, perfectSession: 50, fullWeek: 150, record: 25 };
 
 // Compare un exercice fait aux meilleures perfs passées et met ces perfs à jour.
@@ -108,10 +110,19 @@ export function computeGame(entries, exerciseInfo, firstSeen, currentIndex = 0) 
   let tonnage = 0;
   let perfectSessions = 0;
   const journal = [];
-  const best = {}; // par exercice : charge max, charge max par nombre de reps, 1RM estimé max
-  const records = []; // records battus, dans l'ordre du programme
+  // Records par programme (la référence repart à chaque programme, utile en sèche ou après une coupure),
+  // et records de tous les temps en parallèle.
+  let best = {}; // par exercice : charge max, charge max par nombre de reps, 1RM estimé max
+  let bestProgram = null;
+  const bestEver = {};
+  const allTime = {}; // par exercice : la charge la plus lourde jamais faite, et quand
+  const records = []; // records battus, dans l'ordre chronologique
 
   for (const s of sessions) {
+    if (s.programIndex !== bestProgram) {
+      best = {};
+      bestProgram = s.programIndex;
+    }
     const planned = s.exercises.filter((x) => x.sets > 0);
     const done = s.exercises.filter((x) => x.done);
     s.tonnage = done.reduce((sum, x) => sum + x.tonnage, 0);
@@ -119,11 +130,21 @@ export function computeGame(entries, exerciseInfo, firstSeen, currentIndex = 0) 
     s.xp = 0;
     s.records = 0;
     for (const x of done) {
-      x.record = checkRecord(best, x);
+      const top = Math.max(0, ...x.loads);
+      if (top > (allTime[x.canonical]?.load ?? 0)) {
+        allTime[x.canonical] = {
+          name: x.canonical, emoji: x.emoji, lift: x.lift, competition: x.competition,
+          load: top, reps: x.reps, program: s.program, date: firstSeen[s.key] ?? null,
+        };
+      }
+      // Battre l'historique compte même si c'est la première séance de l'exercice dans ce programme.
+      const inProgram = checkRecord(best, x);
+      const ever = checkRecord(bestEver, x);
+      x.record = inProgram || ever ? { ...(inProgram ?? ever), allTime: Boolean(ever) } : null;
       if (!x.record) continue;
       s.records += 1;
       records.push({
-        id: `${s.key}|${x.canonical}`, session: s.key, program: s.program, week: s.week, day: s.day,
+        id: `${s.key}|${x.canonical}`, session: s.key, program: s.program, programIndex: s.programIndex, week: s.week, day: s.day,
         name: x.name, canonical: x.canonical, emoji: x.emoji, lift: x.lift, competition: x.competition, ...x.record,
       });
     }
@@ -170,7 +191,7 @@ export function computeGame(entries, exerciseInfo, firstSeen, currentIndex = 0) 
       }
     }
     const best = history.reduce((m, h) => Math.max(m, h.e1rm), 0) || null;
-    return { lift, best, history, records: records.filter((r) => r.lift === lift && r.competition) };
+    return { lift, best, history, records: records.filter((r) => r.lift === lift && r.competition && r.programIndex === currentIndex) };
   });
 
   // --- Tables de charges : 1RM estimé sur la séance la plus récente de chaque exercice, croisé reps × RPE
@@ -242,6 +263,9 @@ export function computeGame(entries, exerciseInfo, firstSeen, currentIndex = 0) 
     next,
     bosses,
     records,
+    allTimeBests: Object.values(allTime).sort(
+      (a, b) => b.competition - a.competition || LIFT_ORDER.indexOf(a.lift) - LIFT_ORDER.indexOf(b.lift) || a.name.localeCompare(b.name, "fr"),
+    ),
     loadTables,
     tableRpes: TABLE_RPES,
     badges,

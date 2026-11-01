@@ -15,6 +15,9 @@ export function numberList(text) {
     .filter((n) => Number.isFinite(n));
 }
 
+// Charges réellement soulevées : une barre ratée ("147 fail") ou une durée ("8s") n'en est pas une.
+const loadList = (text) => numberList(clean(text).split("/").filter((part) => !/fail|miss|raté|échec|\d\s*s$/i.test(part.trim())).join("/"));
+
 // Étale une liste de valeurs sur le nombre de séries (une seule valeur = toutes les séries).
 function perSet(values, sets) {
   if (!values.length || !sets) return [];
@@ -25,8 +28,9 @@ function parseEntry(raw) {
   const sets = parseInt(raw.sets, 10) || 0;
   const firstReps = parseFloat(clean(raw.reps)); // "5(8)" -> 5, "15/4" (myo-reps) -> 15
   const reps = Number.isFinite(firstReps) ? firstReps : 0;
-  const loads = perSet(numberList(raw.load), sets || numberList(raw.load).length);
-  const rpes = perSet(numberList(raw.intensity), sets);
+  const loads = perSet(loadList(raw.load), sets || loadList(raw.load).length);
+  // Les pourcentages ("67%") ne sont pas des RPE ; un RPE est entre 1 et 10.
+  const rpes = /%/.test(raw.intensity) ? [] : perSet(numberList(raw.intensity).filter((n) => n <= 10), sets);
   return {
     sets,
     reps,
@@ -43,6 +47,7 @@ function parseEntry(raw) {
 
 export function parseWorkbook(workbook) {
   const entries = [];
+  let lastWeek = 0;
 
   workbook.SheetNames.forEach((block, blockIndex) => {
     const rows = XLSX.utils.sheet_to_json(workbook.Sheets[block], {
@@ -74,6 +79,11 @@ export function parseWorkbook(workbook) {
             const name = clean(row[i]).toLowerCase();
             if (COLUMN_NAMES.includes(name)) columns[name] = i;
           }
+          // Certains modèles décalent l'en-tête : "Load" contient l'intensité, la charge est dans la colonne sans titre d'après.
+          if (columns.intensity == null && columns.load != null && clean(row[columns.load + 1]) === "") {
+            columns.intensity = columns.load;
+            columns.load += 1;
+          }
           return columns;
         });
         day += 1;
@@ -83,10 +93,14 @@ export function parseWorkbook(workbook) {
 
       if (!groups || !first || /^day\s*\d+/i.test(first) || /week\s*\d+/i.test(first)) continue;
 
+      const raws = groups.map((columns) => Object.fromEntries(COLUMN_NAMES.map((n) => [n, columns[n] != null ? row[columns[n]] : ""])));
+      // Ligne sans aucune valeur : un intitulé ("5 Days from Competition"), pas un exercice.
+      if (raws.every((raw) => Object.values(raw).every((v) => clean(v) === ""))) continue;
+
       order += 1;
-      groups.forEach((columns, g) => {
-        const raw = Object.fromEntries(COLUMN_NAMES.map((n) => [n, columns[n] != null ? row[columns[n]] : ""]));
-        const week = weekNumbers[g] ?? g + 1;
+      raws.forEach((raw, g) => {
+        // Onglet sans "Week N" (ex. semaine d'affûtage) : il prend la suite des semaines précédentes.
+        const week = weekNumbers[g] ?? lastWeek + g + 1;
         entries.push({
           block,
           blockIndex,
@@ -99,6 +113,7 @@ export function parseWorkbook(workbook) {
         });
       });
     }
+    lastWeek = Math.max(lastWeek, ...entries.map((e) => e.week));
   });
 
   return entries;

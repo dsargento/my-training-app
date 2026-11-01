@@ -8,15 +8,27 @@ import { computeGame, computeTrophies } from "./src/game.js";
 import { aiEnabled, classifyExercises, coachReport } from "./src/ai.js";
 import { readState, writeState } from "./src/store.js";
 import { loadMeets } from "./src/openpowerlifting.js";
-import { syncProgram } from "./src/programs.js";
+import { importPrograms, syncProgram } from "./src/programs.js";
+import fs from "node:fs";
 
 const SOURCE = process.env.SHEET_SOURCE || "./data/programme.xlsx";
 const PORT = Number(process.env.PORT) || 3000;
 const PROGRAM_NAME = process.env.PROGRAM_NAME || "Programme";
 const NEXT_MEET = { name: process.env.NEXT_MEET_NAME, date: process.env.NEXT_MEET_DATE };
 
+// Programmes passés à importer (facultatif) : [{ "name", "source", "start" | "end" }].
+function pastPrograms() {
+  try {
+    return JSON.parse(fs.readFileSync("data/programs.json", "utf8"));
+  } catch (err) {
+    if (err.code !== "ENOENT") console.warn(`data/programs.json illisible : ${err.message}`);
+    return [];
+  }
+}
+
 async function buildGame() {
   const state = readState();
+  await importPrograms(state, pastPrograms(), async (source) => parseWorkbook(await loadWorkbook(source)));
   const today = new Date().toISOString().slice(0, 10);
   const { entries, firstSeen, currentIndex } = syncProgram(state, {
     source: SOURCE,
