@@ -80,6 +80,14 @@ main { max-width: 1100px; margin: 0 auto; padding: 8px 16px 48px; display: grid;
 .boss-name { font-weight: 700; }
 .boss-val { font-weight: 800; font-size: 1.15rem; font-variant-numeric: tabular-nums; }
 .boss-val small { color: var(--muted); font-weight: 400; font-size: 0.8rem; }
+.boss-status { margin: 0; color: var(--muted); font-size: 0.84rem; }
+.boss-status b { color: var(--gold); }
+.boss-1rm { margin: 6px 0 4px; font-size: 0.84rem; color: var(--muted); }
+.boss-1rm b { color: var(--text); font-variant-numeric: tabular-nums; }
+#bossCard:not(.show-1rm) .one-rm { display: none; }
+.btn-small { padding: 5px 10px; font-size: 0.8rem; font-weight: 500; }
+.reach { display: block; color: var(--green); font-size: 0.78rem; font-weight: 600; margin-top: 2px; }
+.rec { cursor: help; }
 .spark { display: flex; align-items: flex-end; gap: 4px; height: 38px; }
 .spark i { flex: 1; max-width: 26px; background: var(--violet); border-radius: 3px 3px 0 0; opacity: 0.85; min-height: 3px; }
 .spark i.best { background: var(--gold); opacity: 1; }

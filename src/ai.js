@@ -107,6 +107,7 @@ export async function coachReport(game) {
     seancesParfaites: game.perfectSessions,
     enchainement: game.streak,
     tonnageTotalKg: Math.round(game.tonnage),
+    recordsRecents: game.records.slice(-5).map((r) => ({ seance: r.session, exercice: r.canonical, charge: r.load, reps: r.reps, avant: r.previous, chargeMax: r.weight, recordReps: r.rep, plusFort: r.strength })),
     e1rmCompetition: game.bosses.map((b) => ({ mouvement: b.lift, meilleur: b.best, historique: b.history })),
     dernieresSeances: game.journal.slice(0, 4).map((s) => ({
       seance: s.key,

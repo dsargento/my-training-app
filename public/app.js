@@ -1,7 +1,12 @@
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const kg = (n) => (n >= 1000 ? `${(n / 1000).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} t` : `${Math.round(n)} kg`);
+const num = (n) => String(n).replace(".", ",");
 const LIFT_NAMES = { squat: "Squat", bench: "Développé couché", deadlift: "Soulevé de terre" };
+
+// "140 kg × 5", ou juste le constat quand seul le 1RM estimé a progressé.
+const recordText = (r) => (r.weight || r.rep ? `${num(r.load)} kg × ${num(r.reps)}` : "plus fort que jamais 💪");
+const recordDetail = (r) => `${r.name} ${recordText(r)}${r.previous ? ` (avant ${num(r.previous)} kg)` : ""}`;
 
 function toast(message, isError = false) {
   const el = $("toast");
@@ -67,11 +72,12 @@ function renderNext(next) {
       const sugg = x.suggested?.some(Boolean)
         ? `<b>${x.suggested.map((v) => v ?? "?").join(" · ")} kg</b><span class="muted">suggéré</span>`
         : `<span class="muted">—</span>`;
+      const reach = x.recordWithinReach ? `<span class="reach" title="La charge suggérée bat ta meilleure perf">🎯 record possible</span>` : "";
       return `<div class="ex">
         <div class="ex-emoji">${esc(x.emoji)}</div>
         <div><div class="ex-name">${esc(x.name)}</div>
           <div class="ex-presc">${x.sets} × ${esc(x.repsText)} · ${esc(x.intensityText)}${x.rest ? ` · repos ${x.rest}s` : ""}</div></div>
-        <div class="ex-sugg">${sugg}</div>
+        <div class="ex-sugg">${sugg}${reach}</div>
       </div>`;
     })
     .join("");
@@ -82,6 +88,10 @@ function renderNext(next) {
 function renderBosses(bosses) {
   $("bosses").innerHTML = bosses
     .map((b) => {
+      const last = b.records.at(-1);
+      const status = last
+        ? `Dernier : <b>${recordText(last)}</b> · S${last.week} J${last.day}`
+        : b.history.length ? "Ta première séance sert de référence : bats-la !" : "Pas encore affronté";
       const max = Math.max(...b.history.map((h) => h.e1rm), 1);
       const min = Math.min(...b.history.map((h) => h.e1rm)) * 0.9;
       const bars = b.history.length
@@ -91,8 +101,12 @@ function renderBosses(bosses) {
         : `<div class="spark-empty">Pas encore affronté</div>`;
       return `<div class="boss">
         <div class="boss-head"><span class="boss-name">${LIFT_NAMES[b.lift]}</span>
-          <span class="boss-val">${b.best ? `${b.best} <small>kg</small>` : "?"}</span></div>
-        ${bars}
+          <span class="boss-val">${b.records.length} <small>record${b.records.length > 1 ? "s" : ""}</small> 🏆</span></div>
+        <p class="boss-status">${status}</p>
+        <div class="one-rm">
+          <p class="boss-1rm">1RM estimé <b>${b.best ? `${num(b.best)} kg` : "?"}</b></p>
+          ${bars}
+        </div>
       </div>`;
     })
     .join("");
@@ -146,6 +160,22 @@ function renderLoadTable() {
 
 $("tableSelect").addEventListener("change", renderLoadTable);
 
+// Les 1RM estimés restent cachés tant qu'on ne les demande pas (choix mémorisé dans le navigateur).
+function show1RM(visible) {
+  $("bossCard").classList.toggle("show-1rm", visible);
+  $("toggle1rm").textContent = visible ? "Masquer les 1RM" : "Voir les 1RM";
+  $("toggle1rm").setAttribute("aria-pressed", visible);
+  try {
+    localStorage.setItem("show1rm", visible ? "1" : "");
+  } catch {}
+}
+let initial1RM = false;
+try {
+  initial1RM = localStorage.getItem("show1rm") === "1";
+} catch {}
+show1RM(initial1RM);
+$("toggle1rm").addEventListener("click", () => show1RM(!$("bossCard").classList.contains("show-1rm")));
+
 function renderMap(map) {
   const weeks = [...new Set(map.map((s) => s.week))];
   $("map").innerHTML = weeks
@@ -183,9 +213,12 @@ function renderJournal(journal) {
   $("journal").innerHTML = journal
     .map((s) => {
       const date = s.date ? new Date(s.date).toLocaleDateString("fr-FR", { day: "numeric", month: "long" }) : "";
-      const done = s.exercises.filter((x) => x.done).map((x) => `${esc(x.name)} ${esc(x.loadText)}`).join(" · ");
+      const done = s.exercises
+        .filter((x) => x.done)
+        .map((x) => `${esc(x.name)} ${esc(x.loadText)}${x.record ? ` <span class="rec" title="Record : ${esc(recordText(x.record))}">🏆</span>` : ""}`)
+        .join(" · ");
       return `<div class="log">
-        <div class="log-head"><div><b>Semaine ${s.week} · Jour ${s.day}</b>${s.status === "perfect" ? `<span class="pill">💎 parfaite</span>` : ""}
+        <div class="log-head"><div><b>Semaine ${s.week} · Jour ${s.day}</b>${s.status === "perfect" ? `<span class="pill">💎 parfaite</span>` : ""}${s.records ? `<span class="pill">🏆 ${s.records} record${s.records > 1 ? "s" : ""}</span>` : ""}
           <span class="muted small"> ${date} · ${kg(s.tonnage)}</span></div>
           <span class="log-xp">+${s.xp} XP</span></div>
         <div class="log-ex">${done}</div>
@@ -216,8 +249,10 @@ async function load() {
 
     if (previous) {
       const gained = g.xp - previous.xp;
+      const newRecords = g.records.filter((r) => !previous.records.some((p) => p.id === r.id));
       const newBadges = g.badges.filter((b) => b.unlocked && !previous.badges.find((p) => p.id === b.id)?.unlocked);
       if (g.level > previous.level) toast(`🎉 Niveau ${g.level} ! Tu es désormais ${g.title}.`);
+      else if (newRecords.length) toast(`🏆 Nouveau record : ${newRecords.map(recordDetail).join(" · ")}`);
       else if (newBadges.length) toast(`🏅 Succès débloqué : ${newBadges.map((b) => b.name).join(", ")}`);
       else if (gained > 0) toast(`+${gained} XP`);
       else toast("Synchronisé, rien de nouveau.");

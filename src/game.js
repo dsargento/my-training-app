@@ -51,7 +51,39 @@ function levelFromXp(xp) {
   };
 }
 
-export const XP = { exercise: 10, perTonne: 10, perfectSession: 50, fullWeek: 150 };
+export const XP = { exercise: 10, perTonne: 10, perfectSession: 50, fullWeek: 150, record: 25 };
+
+// Compare un exercice fait aux meilleures perfs passées et met ces perfs à jour.
+// La première fois qu'un exercice apparaît, il sert de référence : pas de record.
+function checkRecord(best, x) {
+  const top = Math.max(0, ...x.loads);
+  if (!top) return null;
+  const b = best[x.canonical];
+  if (!b) {
+    best[x.canonical] = { load: top, byReps: x.reps ? { [x.reps]: top } : {}, e1rm: x.e1rm };
+    return null;
+  }
+  const atReps = x.reps ? b.byReps[x.reps] : undefined;
+  const kinds = {
+    weight: top > b.load, // charge la plus lourde jamais faite
+    rep: atReps != null && top > atReps, // plus lourd à ce nombre de reps
+    strength: x.e1rm != null && b.e1rm != null && x.e1rm > b.e1rm, // 1RM estimé en hausse
+  };
+  const previous = kinds.rep ? atReps : kinds.weight ? b.load : null;
+  b.load = Math.max(b.load, top);
+  if (x.reps) b.byReps[x.reps] = Math.max(atReps ?? 0, top);
+  if (x.e1rm != null) b.e1rm = Math.max(b.e1rm ?? 0, x.e1rm);
+  if (!kinds.weight && !kinds.rep && !kinds.strength) return null;
+  return { ...kinds, load: top, reps: x.reps, previous };
+}
+
+// La charge suggérée battrait-elle la meilleure perf (tous reps confondus, ou à ce nombre de reps) ?
+function recordWithinReach(b, x) {
+  const top = Math.max(0, ...(x.suggested ?? []).filter(Boolean));
+  if (!b || !top) return false;
+  const atReps = x.reps ? b.byReps[x.reps] : undefined;
+  return top > b.load || (atReps != null && top > atReps);
+}
 
 export function computeGame(entries, exerciseInfo, firstSeen) {
   const info = (name) => exerciseInfo[name] ?? { canonical: name, lift: "other", competition: false, emoji: "🏋️" };
@@ -71,6 +103,8 @@ export function computeGame(entries, exerciseInfo, firstSeen) {
   let tonnage = 0;
   let perfectSessions = 0;
   const journal = [];
+  const best = {}; // par exercice : charge max, charge max par nombre de reps, 1RM estimé max
+  const records = []; // records battus, dans l'ordre du programme
 
   for (const s of sessions) {
     const planned = s.exercises.filter((x) => x.sets > 0);
@@ -78,8 +112,18 @@ export function computeGame(entries, exerciseInfo, firstSeen) {
     s.tonnage = done.reduce((sum, x) => sum + x.tonnage, 0);
     s.status = done.length === 0 ? "todo" : planned.every((x) => x.done) ? "perfect" : "done";
     s.xp = 0;
+    s.records = 0;
+    for (const x of done) {
+      x.record = checkRecord(best, x);
+      if (!x.record) continue;
+      s.records += 1;
+      records.push({
+        id: `${s.key}|${x.canonical}`, session: s.key, week: s.week, day: s.day,
+        name: x.name, canonical: x.canonical, emoji: x.emoji, lift: x.lift, competition: x.competition, ...x.record,
+      });
+    }
     if (done.length) {
-      s.xp = done.length * XP.exercise + Math.round((s.tonnage / 1000) * XP.perTonne);
+      s.xp = done.length * XP.exercise + Math.round((s.tonnage / 1000) * XP.perTonne) + s.records * XP.record;
       if (s.status === "perfect") {
         s.xp += XP.perfectSession;
         perfectSessions += 1;
@@ -120,16 +164,8 @@ export function computeGame(entries, exerciseInfo, firstSeen) {
       }
     }
     const best = history.reduce((m, h) => Math.max(m, h.e1rm), 0) || null;
-    return { lift, best, history };
+    return { lift, best, history, records: records.filter((r) => r.lift === lift && r.competition) };
   });
-
-  // --- Records : 1RM estimé de chaque exercice (pour proposer des charges)
-  const records = {};
-  for (const s of sessions) {
-    for (const x of s.exercises) {
-      if (x.e1rm && x.e1rm > (records[x.canonical]?.e1rm ?? 0)) records[x.canonical] = { e1rm: x.e1rm, session: s.key };
-    }
-  }
 
   // --- Tables de charges : 1RM estimé sur la séance la plus récente de chaque exercice, croisé reps × RPE
   const latest = {};
@@ -152,6 +188,7 @@ export function computeGame(entries, exerciseInfo, firstSeen) {
     for (const x of next.exercises) {
       const table = loadTables[x.canonical];
       x.suggested = table && x.rpes.length ? x.rpes.map((rpe) => loadAt(table.e1rm, x.reps, rpe)) : null;
+      x.recordWithinReach = !x.done && recordWithinReach(best[x.canonical], x);
     }
   }
 
@@ -166,6 +203,8 @@ export function computeGame(entries, exerciseInfo, firstSeen) {
     { id: "perfect", icon: "💎", name: "Perfectionniste", desc: "5 séances parfaites (tous les exercices faits)", progress: perfectSessions, goal: 5 },
     { id: "week", icon: "📅", name: "Semaine bouclée", desc: "Toutes les séances d'une semaine", progress: Math.min(fullWeeks.length, 1), goal: 1 },
     { id: "streak", icon: "⛓️", name: "Inarrêtable", desc: "8 séances enchaînées sans en sauter", progress: Math.min(bestStreak, 8), goal: 8 },
+    { id: "record1", icon: "🏆", name: "Premier record", desc: "Battre ta meilleure perf sur un exercice", progress: Math.min(records.length, 1), goal: 1 },
+    { id: "record10", icon: "🎖️", name: "Collectionneur", desc: "10 records battus", progress: Math.min(records.length, 10), goal: 10 },
     { id: "t10", icon: "🏗️", name: "10 tonnes", desc: "10 000 kg soulevés au total", progress: Math.min(tonnage, 10000), goal: 10000 },
     { id: "t100", icon: "🌋", name: "100 tonnes", desc: "100 000 kg soulevés au total", progress: Math.min(tonnage, 100000), goal: 100000 },
     { id: "squat", icon: "👑", name: "Roi du squat", desc: "30 tonnes en squat (c'est un bloc squat !)", progress: Math.min(liftTonnage("squat"), 30000), goal: 30000 },
