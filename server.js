@@ -8,25 +8,30 @@ import { computeGame, computeTrophies } from "./src/game.js";
 import { aiEnabled, classifyExercises, coachReport } from "./src/ai.js";
 import { readState, writeState } from "./src/store.js";
 import { loadMeets } from "./src/openpowerlifting.js";
+import { syncProgram } from "./src/programs.js";
 
 const SOURCE = process.env.SHEET_SOURCE || "./data/programme.xlsx";
 const PORT = Number(process.env.PORT) || 3000;
+const PROGRAM_NAME = process.env.PROGRAM_NAME || "Programme";
 const NEXT_MEET = { name: process.env.NEXT_MEET_NAME, date: process.env.NEXT_MEET_DATE };
 
-// Le tableur n'a pas de dates : une séance est datée du jour où l'appli la voit faite pour la première fois.
 async function buildGame() {
-  const entries = parseWorkbook(await loadWorkbook(SOURCE));
   const state = readState();
-
   const today = new Date().toISOString().slice(0, 10);
-  for (const e of entries) if (e.done) state.firstSeen[e.session] ??= today;
+  const { entries, firstSeen, currentIndex } = syncProgram(state, {
+    source: SOURCE,
+    name: PROGRAM_NAME,
+    entries: parseWorkbook(await loadWorkbook(SOURCE)),
+    today,
+  });
 
   const unknown = [...new Set(entries.map((e) => e.name))].filter((n) => !state.exercises[n]);
   Object.assign(state.exercises, await classifyExercises(unknown));
   state.openpowerlifting = await loadMeets(process.env.OPENPOWERLIFTING_USER, state.openpowerlifting);
   writeState(state);
 
-  const game = computeGame(entries, state.exercises, state.firstSeen);
+  const game = computeGame(entries, state.exercises, firstSeen, currentIndex);
+  game.programName = PROGRAM_NAME;
   game.trophies = computeTrophies(state.openpowerlifting?.meets ?? [], NEXT_MEET);
   return { game, state };
 }

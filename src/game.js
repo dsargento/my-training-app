@@ -85,19 +85,24 @@ function recordWithinReach(b, x) {
   return top > b.load || (atReps != null && top > atReps);
 }
 
-export function computeGame(entries, exerciseInfo, firstSeen) {
+export function computeGame(entries, exerciseInfo, firstSeen, currentIndex = 0) {
   const info = (name) => exerciseInfo[name] ?? { canonical: name, lift: "other", competition: false, emoji: "🏋️" };
 
   // --- Séances, dans l'ordre du programme
   const sessionMap = new Map();
   for (const e of entries) {
     if (!sessionMap.has(e.session)) {
-      sessionMap.set(e.session, { key: e.session, block: e.block, blockIndex: e.blockIndex, week: e.week, day: e.day, exercises: [] });
+      sessionMap.set(e.session, {
+        key: e.session, program: e.program, programIndex: e.programIndex ?? 0,
+        block: e.block, blockIndex: e.blockIndex, week: e.week, day: e.day, exercises: [],
+      });
     }
     const e1rm = e.done ? estimate1RM(e) : null;
     sessionMap.get(e.session).exercises.push({ ...e, ...info(e.name), e1rm });
   }
-  const sessions = [...sessionMap.values()].sort((a, b) => a.week - b.week || a.day - b.day);
+  // Programmes archivés d'abord, puis le programme en cours ; l'XP, les records et le journal courent sur l'ensemble.
+  const sessions = [...sessionMap.values()].sort((a, b) => a.programIndex - b.programIndex || a.week - b.week || a.day - b.day);
+  const current = sessions.filter((s) => s.programIndex === currentIndex);
 
   let xp = 0;
   let tonnage = 0;
@@ -118,7 +123,7 @@ export function computeGame(entries, exerciseInfo, firstSeen) {
       if (!x.record) continue;
       s.records += 1;
       records.push({
-        id: `${s.key}|${x.canonical}`, session: s.key, week: s.week, day: s.day,
+        id: `${s.key}|${x.canonical}`, session: s.key, program: s.program, week: s.week, day: s.day,
         name: x.name, canonical: x.canonical, emoji: x.emoji, lift: x.lift, competition: x.competition, ...x.record,
       });
     }
@@ -138,8 +143,9 @@ export function computeGame(entries, exerciseInfo, firstSeen) {
   // --- Semaines complètes
   const weeks = new Map();
   for (const s of sessions) {
-    if (!weeks.has(s.week)) weeks.set(s.week, { week: s.week, block: s.block, sessions: [] });
-    weeks.get(s.week).sessions.push(s);
+    const key = `${s.programIndex}|${s.week}`;
+    if (!weeks.has(key)) weeks.set(key, { week: s.week, block: s.block, sessions: [] });
+    weeks.get(key).sessions.push(s);
   }
   const fullWeeks = [...weeks.values()].filter((w) => w.sessions.every((s) => s.status !== "todo"));
   xp += fullWeeks.length * XP.fullWeek;
@@ -160,7 +166,7 @@ export function computeGame(entries, exerciseInfo, firstSeen) {
     const history = [];
     for (const s of sessions) {
       for (const x of s.exercises) {
-        if (x.lift === lift && x.competition && x.e1rm) history.push({ week: s.week, session: s.key, e1rm: x.e1rm });
+        if (x.lift === lift && x.competition && x.e1rm) history.push({ program: s.program, week: s.week, session: s.key, e1rm: x.e1rm });
       }
     }
     const best = history.reduce((m, h) => Math.max(m, h.e1rm), 0) || null;
@@ -193,9 +199,9 @@ export function computeGame(entries, exerciseInfo, firstSeen) {
   }
 
   // --- Badges
-  const blockNames = [...new Set(sessions.map((s) => s.block))];
-  const blockDone = (name) => sessions.filter((s) => s.block === name).every((s) => s.status !== "todo");
+  const blockNames = [...new Set(current.map((s) => s.block))];
   const doneCount = sessions.filter((s) => s.status !== "todo").length;
+  const currentDone = current.filter((s) => s.status !== "todo").length;
   const liftTonnage = (lift) => sessions.flatMap((s) => s.exercises).filter((x) => x.done && x.lift === lift).reduce((a, x) => a + x.tonnage, 0);
 
   const badges = [
@@ -209,7 +215,7 @@ export function computeGame(entries, exerciseInfo, firstSeen) {
     { id: "t100", icon: "🌋", name: "100 tonnes", desc: "100 000 kg soulevés au total", progress: Math.min(tonnage, 100000), goal: 100000 },
     { id: "squat", icon: "👑", name: "Roi du squat", desc: "30 tonnes en squat (c'est un bloc squat !)", progress: Math.min(liftTonnage("squat"), 30000), goal: 30000 },
     ...blockNames.map((name) => {
-      const list = sessions.filter((s) => s.block === name);
+      const list = current.filter((s) => s.block === name);
       const isDeload = /deload/i.test(name);
       return {
         id: `block-${name}`,
@@ -220,15 +226,15 @@ export function computeGame(entries, exerciseInfo, firstSeen) {
         goal: list.length,
       };
     }),
-    { id: "all", icon: "🏆", name: "Programme terminé", desc: "Les " + sessions.length + " séances du programme", progress: doneCount, goal: sessions.length },
+    { id: "all", icon: "🏆", name: "Programme terminé", desc: "Les " + current.length + " séances du programme", progress: currentDone, goal: current.length },
   ].map((b) => ({ ...b, unlocked: b.progress >= b.goal }));
 
   return {
     xp,
     ...levelFromXp(xp),
     tonnage,
-    sessionsDone: doneCount,
-    sessionsTotal: sessions.length,
+    sessionsDone: currentDone,
+    sessionsTotal: current.length,
     perfectSessions,
     fullWeeks: fullWeeks.length,
     streak: currentStreak < 0 ? lastDoneIndex + 1 : currentStreak,
@@ -240,7 +246,7 @@ export function computeGame(entries, exerciseInfo, firstSeen) {
     tableRpes: TABLE_RPES,
     badges,
     journal: journal.reverse(),
-    map: sessions.map(({ key, block, week, day, status, xp: sxp }) => ({ key, block, week, day, status, xp: sxp, isNext: key === next?.key })),
+    map: current.map(({ key, block, week, day, status, xp: sxp }) => ({ key, block, week, day, status, xp: sxp, isNext: key === next?.key })),
   };
 }
 

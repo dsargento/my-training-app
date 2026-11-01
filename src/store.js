@@ -1,9 +1,9 @@
-// Petit état persistant en JSON : dates de première détection des séances, cache IA.
+// Petit état persistant en JSON : programme en cours et archivés, classement des exercices, caches.
 import fs from "node:fs";
 import path from "node:path";
 
 const file = () => path.resolve("data/state.json");
-const EMPTY = { firstSeen: {}, exercises: {}, coach: null };
+const EMPTY = { program: null, archive: [], exercises: {}, coach: null };
 
 export function readState() {
   try {

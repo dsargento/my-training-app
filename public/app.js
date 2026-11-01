@@ -40,6 +40,7 @@ function markdown(text) {
 }
 
 function renderHero(g) {
+  $("programName").textContent = g.programName;
   $("level").textContent = g.level;
   $("title").textContent = g.title;
   const pct = g.current / g.needed;
@@ -96,7 +97,7 @@ function renderBosses(bosses) {
       const min = Math.min(...b.history.map((h) => h.e1rm)) * 0.9;
       const bars = b.history.length
         ? `<div class="spark">${b.history
-            .map((h) => `<i class="${h.e1rm === b.best ? "best" : ""}" style="height:${((h.e1rm - min) / (max - min || 1)) * 85 + 15}%" title="Semaine ${h.week} : ${h.e1rm} kg"></i>`)
+            .map((h) => `<i class="${h.e1rm === b.best ? "best" : ""}" style="height:${((h.e1rm - min) / (max - min || 1)) * 85 + 15}%" title="${esc(h.program)} · Semaine ${h.week} : ${h.e1rm} kg"></i>`)
             .join("")}</div>`
         : `<div class="spark-empty">Pas encore affronté</div>`;
       return `<div class="boss">
@@ -234,7 +235,7 @@ function renderTrophies(t) {
   $("trophies").innerHTML = next + meets;
 }
 
-function renderJournal(journal) {
+function renderJournal(journal, programName) {
   if (!journal.length) {
     $("journal").innerHTML = `<p class="empty">Aucune séance pour l'instant. La première quête t'attend.</p>`;
     return;
@@ -248,7 +249,7 @@ function renderJournal(journal) {
         .join(" · ");
       return `<div class="log">
         <div class="log-head"><div><b>Semaine ${s.week} · Jour ${s.day}</b>${s.status === "perfect" ? `<span class="pill">💎 parfaite</span>` : ""}${s.records ? `<span class="pill">🏆 ${s.records} record${s.records > 1 ? "s" : ""}</span>` : ""}
-          <span class="muted small"> ${date} · ${kg(s.tonnage)}</span></div>
+          <span class="muted small"> ${s.program !== programName ? `${esc(s.program)} · ` : ""}${date} · ${kg(s.tonnage)}</span></div>
           <span class="log-xp">+${s.xp} XP</span></div>
         <div class="log-ex">${done}</div>
       </div>`;
@@ -272,7 +273,7 @@ async function load() {
     renderMap(g.map);
     renderTrophies(g.trophies);
     renderBadges(g.badges);
-    renderJournal(g.journal);
+    renderJournal(g.journal, g.programName);
     if (g.coach) $("coach").innerHTML = markdown(g.coach.text);
     $("coachBtn").hidden = !g.aiEnabled;
     if (!g.aiEnabled) $("coach").textContent = "Ajoute ta clé ANTHROPIC_API_KEY dans le fichier .env pour réveiller le coach.";
