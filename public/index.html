@@ -22,7 +22,10 @@
       <div class="xpbar"><div id="xpfill"></div></div>
       <p class="muted" id="xptext"></p>
     </div>
-    <button id="sync" class="btn">⟳ Synchroniser</button>
+    <div class="sync-box">
+      <button id="sync" class="btn">⟳ Synchroniser</button>
+      <small id="syncedAt" class="muted"></small>
+    </div>
   </header>
 
   <main>
@@ -81,6 +84,19 @@
       <div id="journal"></div>
     </section>
   </main>
+
+  <dialog id="login" class="login">
+    <form method="dialog" id="loginForm">
+      <h2>🔒 Connexion</h2>
+      <p class="muted small">La synchro et le coach sont réservés à l'athlète. Tout le reste est consultable librement.</p>
+      <input type="password" id="password" class="input" autocomplete="current-password" aria-label="Mot de passe" placeholder="Mot de passe" required>
+      <p id="loginError" class="login-error" role="alert"></p>
+      <div class="login-actions">
+        <button value="cancel" formnovalidate class="btn">Annuler</button>
+        <button value="ok" class="btn btn-primary">Se connecter</button>
+      </div>
+    </form>
+  </dialog>
 
   <div id="toast" class="toast" hidden></div>
   <script src="app.js"></script>

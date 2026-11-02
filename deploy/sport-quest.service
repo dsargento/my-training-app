@@ -1,0 +1,17 @@
+# Service systemd : démarre Sport Quest au boot et le relance s'il plante.
+# À adapter : User et WorkingDirectory. Installation : voir README, « Mise en ligne ».
+[Unit]
+Description=Sport Quest
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=pi
+WorkingDirectory=/home/pi/sport-quest
+ExecStart=/usr/bin/env npm start
+Restart=on-failure
+RestartSec=5
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target

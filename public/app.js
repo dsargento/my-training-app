@@ -277,60 +277,115 @@ function renderJournal(journal, programName) {
 
 let previous = null;
 
+async function api(path, options) {
+  const res = await fetch(path, options);
+  const data = await res.json();
+  if (res.status === 401) throw Object.assign(new Error(data.error), { needsLogin: true });
+  if (!res.ok) throw new Error(data.error);
+  return data;
+}
+
+// Synchro et coach sont réservés à l'athlète : on demande le mot de passe une fois, puis on réessaie.
+function askPassword() {
+  const dialog = $("login");
+  $("loginError").textContent = "";
+  $("password").value = "";
+  dialog.showModal();
+  return new Promise((resolve) => {
+    dialog.onclose = () => resolve(false);
+    $("loginForm").onsubmit = async (event) => {
+      if (event.submitter?.value === "cancel") return;
+      event.preventDefault();
+      try {
+        await api("/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: $("password").value }) });
+        resolve(true);
+        dialog.close();
+      } catch (err) {
+        $("loginError").textContent = err.message;
+      }
+    };
+  });
+}
+
+async function withLogin(action) {
+  try {
+    return await action();
+  } catch (err) {
+    if (!err.needsLogin || !(await askPassword())) throw err;
+    return action();
+  }
+}
+
+function render(g) {
+  renderHero(g);
+  renderTiles(g);
+  renderNext(g.next);
+  renderBosses(g.bosses);
+  renderTableSelect(g);
+  renderMap(g.map);
+  renderTrophies(g.trophies, g.allTimeBests);
+  renderBadges(g.badges);
+  renderJournal(g.journal, g.programName);
+  if (g.coach) $("coach").innerHTML = markdown(g.coach.text);
+  $("coachBtn").hidden = !g.aiEnabled;
+  if (!g.aiEnabled) $("coach").textContent = "Ajoute ta clé ANTHROPIC_API_KEY dans le fichier .env pour réveiller le coach.";
+  // Un visiteur voit la page telle qu'à la dernière synchro ; le cadenas signale ce qui demande le mot de passe.
+  const lock = g.authed ? "" : "🔒 ";
+  $("sync").textContent = `${lock || "⟳ "}Synchroniser`;
+  $("coachBtn").textContent = `${lock}Demander un bilan`;
+  $("syncedAt").textContent = g.syncedAt
+    ? `Synchro : ${new Date(g.syncedAt).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`
+    : "";
+}
+
+function announceChanges(g) {
+  const gained = g.xp - previous.xp;
+  const newRecords = g.records.filter((r) => !previous.records.some((p) => p.id === r.id));
+  const newBadges = g.badges.filter((b) => b.unlocked && !previous.badges.find((p) => p.id === b.id)?.unlocked);
+  if (g.level > previous.level) toast(`🎉 Niveau ${g.level} ! Tu es désormais ${g.title}.`);
+  else if (newRecords.length) toast(`🏆 Nouveau record : ${newRecords.map(recordDetail).join(" · ")}`);
+  else if (newBadges.length) toast(`🏅 Succès débloqué : ${newBadges.map((b) => b.name).join(", ")}`);
+  else if (gained > 0) toast(`+${gained} XP`);
+  else toast("Synchronisé, rien de nouveau.");
+}
+
 async function load() {
+  try {
+    previous = await api("/api/game");
+    render(previous);
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+$("sync").addEventListener("click", async () => {
   $("sync").disabled = true;
   try {
-    const res = await fetch("/api/game");
-    const g = await res.json();
-    if (!res.ok) throw new Error(g.error);
-    renderHero(g);
-    renderTiles(g);
-    renderNext(g.next);
-    renderBosses(g.bosses);
-    renderTableSelect(g);
-    renderMap(g.map);
-    renderTrophies(g.trophies, g.allTimeBests);
-    renderBadges(g.badges);
-    renderJournal(g.journal, g.programName);
-    if (g.coach) $("coach").innerHTML = markdown(g.coach.text);
-    $("coachBtn").hidden = !g.aiEnabled;
-    if (!g.aiEnabled) $("coach").textContent = "Ajoute ta clé ANTHROPIC_API_KEY dans le fichier .env pour réveiller le coach.";
-
-    if (previous) {
-      const gained = g.xp - previous.xp;
-      const newRecords = g.records.filter((r) => !previous.records.some((p) => p.id === r.id));
-      const newBadges = g.badges.filter((b) => b.unlocked && !previous.badges.find((p) => p.id === b.id)?.unlocked);
-      if (g.level > previous.level) toast(`🎉 Niveau ${g.level} ! Tu es désormais ${g.title}.`);
-      else if (newRecords.length) toast(`🏆 Nouveau record : ${newRecords.map(recordDetail).join(" · ")}`);
-      else if (newBadges.length) toast(`🏅 Succès débloqué : ${newBadges.map((b) => b.name).join(", ")}`);
-      else if (gained > 0) toast(`+${gained} XP`);
-      else toast("Synchronisé, rien de nouveau.");
-    }
+    const g = await withLogin(() => api("/api/sync", { method: "POST" }));
+    if (previous) announceChanges(g);
+    render(g);
     previous = g;
   } catch (err) {
     toast(err.message, true);
   } finally {
     $("sync").disabled = false;
   }
-}
-
-$("sync").addEventListener("click", load);
+});
 
 $("coachBtn").addEventListener("click", async () => {
   const btn = $("coachBtn");
   btn.disabled = true;
   btn.textContent = "Le coach réfléchit…";
   try {
-    const res = await fetch("/api/coach", { method: "POST" });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
+    const data = await withLogin(() => api("/api/coach", { method: "POST" }));
     $("coach").classList.remove("muted");
     $("coach").innerHTML = markdown(data.text);
+    previous.authed = true;
   } catch (err) {
     toast(err.message, true);
   } finally {
     btn.disabled = false;
-    btn.textContent = "Demander un bilan";
+    btn.textContent = `${previous?.authed ? "" : "🔒 "}Demander un bilan`;
   }
 });
 

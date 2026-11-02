@@ -53,6 +53,18 @@ h2 { font-size: 1.05rem; margin-bottom: 14px; display: flex; align-items: baseli
 .btn:hover { border-color: var(--gold); }
 .btn:disabled { opacity: 0.6; cursor: wait; }
 
+.sync-box { display: grid; gap: 4px; justify-items: end; }
+.sync-box small { font-size: 0.72rem; white-space: nowrap; }
+.btn-primary { background: var(--gold); color: #1a1306; border-color: var(--gold); }
+
+.login { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; width: min(360px, calc(100% - 32px)); }
+.login::backdrop { background: rgba(5, 6, 10, 0.7); }
+.login h2 { margin-bottom: 6px; }
+.input { width: 100%; background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font: inherit; margin-top: 8px; }
+.input:focus { outline: 2px solid var(--violet); outline-offset: 1px; }
+.login-error { color: var(--red); font-size: 0.85rem; min-height: 1.2em; margin: 8px 0; }
+.login-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
 main { max-width: 1100px; margin: 0 auto; padding: 8px 16px 48px; display: grid; gap: 16px; }
 
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; min-width: 0; }
@@ -173,7 +185,8 @@ main { max-width: 1100px; margin: 0 auto; padding: 8px 16px 48px; display: grid;
   .hero { flex-wrap: wrap; gap: 14px; }
   .avatar { width: 76px; height: 76px; }
   .hero-text { flex-basis: calc(100% - 90px); }
-  #sync { width: 100%; }
+  .sync-box { width: 100%; justify-items: stretch; }
+  .sync-box small { text-align: center; }
   .avatar-level { font-size: 1.5rem; }
 }
 

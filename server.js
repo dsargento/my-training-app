@@ -10,6 +10,7 @@ import { readState, writeState } from "./src/store.js";
 import { loadMeets } from "./src/openpowerlifting.js";
 import { importPrograms, syncProgram } from "./src/programs.js";
 import fs from "node:fs";
+import { authRequired, isAuthed, login, requireAuth } from "./src/auth.js";
 
 const SOURCE = process.env.SHEET_SOURCE || "./data/programme.xlsx";
 const PORT = Number(process.env.PORT) || 3000;
@@ -48,35 +49,72 @@ async function buildGame() {
   return { game, state };
 }
 
-const app = express();
-app.use(express.static("public"));
+// Dernier état calculé : la page publique le lit sans rien déclencher ; seule la synchro (protégée) le recalcule.
+const SNAPSHOT = "data/game.json";
+let snapshot = null;
+try {
+  snapshot = JSON.parse(fs.readFileSync(SNAPSHOT, "utf8"));
+} catch {}
 
-app.get("/api/game", async (req, res) => {
-  try {
-    const { game, state } = await buildGame();
-    res.json({ ...game, aiEnabled: aiEnabled(), coach: state.coach });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  }
-});
+function saveSnapshot(next) {
+  snapshot = next;
+  fs.writeFileSync(SNAPSHOT, JSON.stringify(snapshot));
+}
 
-app.post("/api/coach", async (req, res) => {
-  if (!aiEnabled()) return res.status(400).json({ error: "Ajoute ANTHROPIC_API_KEY dans .env pour activer le coach." });
-  try {
-    const { game, state } = await buildGame();
-    // Même données = même bilan : on ne rappelle l'IA que si les séances ont changé.
-    const hash = crypto.createHash("sha1").update(JSON.stringify(game.journal.map((s) => [s.key, s.exercises.map((x) => x.loadText)]))).digest("hex");
-    if (state.coach?.hash !== hash) {
-      state.coach = { hash, text: await coachReport(game), at: new Date().toISOString() };
-      writeState(state);
+// Une seule synchro à la fois : un deuxième appel attend la synchro en cours.
+let running = null;
+function sync() {
+  running ??= (async () => {
+    try {
+      const { game, state } = await buildGame();
+      saveSnapshot({ ...game, aiEnabled: aiEnabled(), coach: state.coach, syncedAt: new Date().toISOString() });
+      return { game, state };
+    } finally {
+      running = null;
     }
-    res.json(state.coach);
+  })();
+  return running;
+}
+
+const app = express();
+app.set("trust proxy", "loopback"); // derrière Cloudflare Tunnel : vraie IP et HTTPS d'origine
+app.use(express.static("public"));
+app.use(express.json());
+
+const route = (handler) => async (req, res) => {
+  try {
+    await handler(req, res);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
   }
-});
+};
+const view = (req) => ({ ...snapshot, authed: isAuthed(req), authRequired });
+
+app.get("/api/game", route(async (req, res) => {
+  if (!snapshot) await sync(); // tout premier lancement : rien à montrer encore
+  res.json(view(req));
+}));
+
+app.post("/api/sync", requireAuth, route(async (req, res) => {
+  await sync();
+  res.json(view(req));
+}));
+
+app.post("/api/login", login);
+
+app.post("/api/coach", requireAuth, route(async (req, res) => {
+  if (!aiEnabled()) return res.status(400).json({ error: "Ajoute ANTHROPIC_API_KEY dans .env pour activer le coach." });
+  const { game, state } = await sync();
+  // Même données = même bilan : on ne rappelle l'IA que si les séances ont changé.
+  const hash = crypto.createHash("sha1").update(JSON.stringify(game.journal.map((s) => [s.key, s.exercises.map((x) => x.loadText)]))).digest("hex");
+  if (state.coach?.hash !== hash) {
+    state.coach = { hash, text: await coachReport(game), at: new Date().toISOString() };
+    writeState(state);
+    saveSnapshot({ ...snapshot, coach: state.coach });
+  }
+  res.json(state.coach);
+}));
 
 app.listen(PORT, (err) => {
   if (err) {
@@ -84,4 +122,5 @@ app.listen(PORT, (err) => {
     process.exit(1);
   }
   console.log(`Sport Quest → http://localhost:${PORT}  (source : ${SOURCE}, IA : ${aiEnabled() ? "oui" : "non"})`);
+  if (!authRequired) console.warn("⚠️  SYNC_PASSWORD absent : synchro et coach ouverts à tous. À définir avant toute mise en ligne.");
 });
